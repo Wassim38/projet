@@ -1,0 +1,46 @@
+provider:
+  name: openfaas
+  gateway: ${OPENFAAS_GATEWAY_URL:-http://127.0.0.1:8080}
+
+functions:
+  checkout-gateway:
+    lang: python3-http
+    handler: ./checkout-gateway
+    image: ${DOCKER_HUB_USERNAME:-wlomri}/saga-checkout-gateway:latest
+    secrets:
+      - db-credentials
+    environment:
+      OPENFAAS_GATEWAY_URL: "http://gateway.openfaas:8080"
+
+  payment-reconciler:
+    lang: python3-http
+    handler: ./payment-reconciler
+    image: ${DOCKER_HUB_USERNAME:-wlomri}/saga-payment-reconciler:latest
+    secrets:
+      - db-credentials
+      - api-credentials
+    environment:
+      OPENFAAS_GATEWAY_URL: "http://gateway.openfaas:8080"
+
+  invoice-archiver:
+    lang: python3-http
+    handler: ./invoice-archiver
+    image: ${DOCKER_HUB_USERNAME:-wlomri}/saga-invoice-archiver:latest
+    secrets:
+      - db-credentials
+      - s3-credentials
+      - api-credentials
+    environment:
+      OPENFAAS_GATEWAY_URL: "http://gateway.openfaas:8080"
+    annotations:
+      com.openfaas.scale.min: "1"
+      com.openfaas.scale.max: "10"
+      com.openfaas.scale.target-procs: "5"
+      com.openfaas.scale.factor: "20"
+
+  order-history-api:
+    lang: python3-http
+    handler: ./order-history-api
+    image: ${DOCKER_HUB_USERNAME:-wlomri}/saga-order-history-api:latest
+    secrets:
+      - db-credentials
