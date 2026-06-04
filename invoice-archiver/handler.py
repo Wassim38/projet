@@ -6,10 +6,17 @@ import psycopg2
 import boto3
 from botocore.client import Config
 import requests
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+# Prometheus Metric definition
+SAGA_INVOICES_ARCHIVED = Counter(
+    'saga_invoices_archived_total',
+    'Total number of invoices successfully archived into S3/MinIO by the SAGA flow'
+)
 
 def read_secret(secret_name, key, default=None):
     """
@@ -57,6 +64,27 @@ def handle(event, context):
     OpenFaaS asynchronous handler logic.
     Expects order details from NATS queue: { order_id, user_id, cart_id, total_amount, items }
     """
+    # 0. Intercept Prometheus metrics requests (GET /metrics)
+    path = ""
+    method = ""
+    if hasattr(event, 'path') and event.path:
+        path = event.path
+    elif isinstance(event, dict) and event.get("path"):
+        path = event["path"]
+        
+    if hasattr(event, 'method') and event.method:
+        method = event.method
+    elif isinstance(event, dict) and event.get("method"):
+        method = event["method"]
+
+    if method == "GET" and (path == "/metrics" or "/metrics" in path or "metrics" in path):
+        logger.info("Serving Prometheus metrics")
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": CONTENT_TYPE_LATEST},
+            "body": generate_latest().decode('utf-8')
+        }
+
     logger.info("Received request in invoice-archiver")
     
     # 1. Parse Event Body
@@ -219,6 +247,13 @@ def handle(event, context):
             logger.error(f"Failed sending webhook notification to Discord: {e}")
     else:
         logger.warning("Discord webhook URL not configured or is dummy. Skipping notification.")
+
+    # 7. Increment Prometheus custom metric on success
+    try:
+        SAGA_INVOICES_ARCHIVED.inc()
+        logger.info("Incremented Prometheus metric 'saga_invoices_archived_total'")
+    except Exception as e:
+        logger.error(f"Failed to increment Prometheus metric: {e}")
 
     return {
         "statusCode": 200,

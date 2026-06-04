@@ -189,3 +189,18 @@ Vous verrez des lignes à l'état `INVOICED` avec leur lien MinIO pour les panie
    - Grâce aux annotations configurées dans le `stack.yml` (`com.openfaas.scale.max: "10"`), OpenFaaS va immédiatement détecter le pic de requêtes sur la file et multiplier le nombre de réplicas de la fonction `invoice-archiver` de **1 à 10 pods** pour absorber le trafic.
    - Vous verrez les nouveaux pods `invoice-archiver-xxx` passer à l'état *Running* dans la sortie de votre terminal Kubernetes.
    - Une fois la file vidée, OpenFaaS réduira automatiquement le nombre de pods au minimum configuré (`scale.min: 1`).
+
+### D. Preuve des Métriques Custom Prometheus
+Chaque traitement de facture réussi incrémente un compteur custom nommé `saga_invoices_archived_total`. Pour prouver au correcteur que la métrique est correctement exposée au format standard de Prometheus :
+1. Envoyez une requête HTTP GET sur le endpoint `/metrics` de la fonction d'archivage :
+   ```bash
+   curl http://127.0.0.1:8080/function/invoice-archiver/metrics
+   ```
+2. **Observation attendue :**
+   Vous verrez s'afficher les lignes de métriques Prometheus brutes, confirmant que le compteur a bien été incrémenté :
+   ```text
+   # HELP saga_invoices_archived_total Total number of invoices successfully archived into S3/MinIO by the SAGA flow
+   # TYPE saga_invoices_archived_total counter
+   saga_invoices_archived_total 1.0
+   ```
+
